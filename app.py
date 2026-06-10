@@ -50,4 +50,6 @@ with gr.Blocks(title="The Unofficial Guide to Band Lore") as demo:
 
 
 if __name__ == "__main__":
-    demo.launch()
+    # share=True also creates a temporary public link (~72h) for demos/recording;
+    # the app still serves locally at http://localhost:7860 exactly as before.
+    demo.launch(share=True)
