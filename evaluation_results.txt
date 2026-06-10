@@ -1,0 +1,150 @@
+================================================================================
+EVALUATION RESULTS — The Unofficial Guide to Band Lore and Concert Culture
+Pipeline: paragraph-aware chunking (900/175) -> all-MiniLM-L6-v2 -> ChromaDB
+          (cosine) -> Groq llama-3.3-70b-versatile, top-k = 5
+Total chunks in collection: 219
+================================================================================
+
+SUMMARY TABLE
+Q#  | Question (abbreviated)                  | Judgment
+----|-----------------------------------------|-------------------
+1   | Papas' shared physical trait            | ACCURATE
+2   | "Atlantic" hospital meaning             | ACCURATE
+3   | Cardinal Copia vs. Papa Nihil           | ACCURATE
+4   | Near-stage, avoid-moshing etiquette     | ACCURATE
+5   | Cell-phone advice at Sleep Token shows  | INACCURATE
+----|-----------------------------------------|-------------------
+    | Results: 4 accurate, 0 partial, 1 inaccurate
+
+================================================================================
+FULL DETAIL
+================================================================================
+
+Q1: "According to the community lore, what specific physical trait is shared by
+     all Papas from the Emeritus bloodline?"
+
+Expected:  They all have one green eye and one white eye.
+Response:  According to the documents, all Papas from the Emeritus bloodline
+           share a specific physical trait: one eye is green, and the other is
+           white.
+Sources:   doc5.txt, doc6.txt, doc7.txt
+Judgment:  ACCURATE
+Reasoning: Exact match. The top chunk (doc5.txt #4, distance 0.3776) states "They
+           all have a familial trait: their eyes. One eye is green, and the other
+           is white," which the model reproduced without adding outside detail.
+
+--------------------------------------------------------------------------------
+
+Q2: "In the track-by-track lore breakdown, what does Vessel waking up in a
+     hospital in the song \"Atlantic\" signify regarding his connection to Sleep?"
+
+Expected:  It signifies a failed suicide attempt meant to sever his connection
+           with the deity Sleep.
+Response:  Vessel waking up in a hospital in the song "Atlantic" signifies that
+           he had a failed suicide attempt, perhaps to sever his connection with
+           Sleep.
+Sources:   doc1.txt
+Judgment:  ACCURATE
+Reasoning: Matches the expected answer. Traceable verbatim to doc1.txt #12, which
+           reads "Vessel wakes up in a hospital after a failed suicide attempt,
+           perhaps to sever his connection with Sleep." The model preserved the
+           source's "perhaps" hedge rather than overstating it.
+
+--------------------------------------------------------------------------------
+
+Q3: "Who is Cardinal Copia in relation to Papa Nihil before he officially
+     becomes Papa Emeritus IV?"
+
+Expected:  He is Papa Nihil's right-hand man and the second most frequent
+           recipient of the Employee of the Month award.
+Response:  According to the documents, Cardinal Copia is Papa Nihil's right-hand
+           man and the second most recipient of the Employee of the Month award.
+           Additionally, it is revealed through the chapters that Cardinal Copia
+           is the bastard son of Sister Imperator and Papa Nihil.
+Sources:   doc5.txt, doc6.txt
+Judgment:  ACCURATE
+Reasoning: Contains the full expected answer (doc5.txt #8). The extra "bastard
+           son" sentence is also grounded in a retrieved chunk (doc5.txt #12), so
+           it is additional correct context, not a hallucination.
+
+--------------------------------------------------------------------------------
+
+Q4: "What is the generally accepted etiquette for a heavy metal fan who wants to
+     be near the stage but completely avoid moshing?"
+
+Expected:  Keep to the perimeter of the circle pit, where bigger fans typically
+           stand to act as a physical shield for those who don't want to
+           participate.
+Response:  According to the documents, general etiquette is to keep moshing
+           limited to a circle, often with bigger guys standing at the perimeter
+           to act as a shield for folks who don't want to participate. It should
+           be easy to steer clear of if you don't want to be a part of it. If
+           you're not game for moshing, you can just move to another spot.
+Sources:   doc3.txt, doc8.txt, doc9.txt
+Judgment:  ACCURATE
+Reasoning: Matches expected. Top chunk (doc8.txt #7, distance 0.3240) supplies the
+           "bigger guys at the perimeter act as a shield" detail; the "move to
+           another spot" addition comes from doc3.txt #26, also retrieved.
+
+--------------------------------------------------------------------------------
+
+Q5: "What specific piece of advice do veteran fans repeatedly give regarding cell
+     phone usage at Sleep Token rituals?"
+
+Expected:  Do not record the entire show or watch the concert through your screen;
+           take a few photos and put the phone down to actually experience the
+           show.
+Response:  I don't have enough information on that topic in the available
+           documents.
+Sources:   (none)
+Judgment:  INACCURATE
+Reasoning: FALSE NEGATIVE. The answer IS in the corpus — doc4.txt #0 ("Don't
+           record the entire concert on your phone... Phone down hands up!... you
+           can watch live recordings later") and doc3.txt #25 ("don't hold your
+           phone high above your head... Just be present"). But these chunks were
+           retrieved only at ranks 4-5 with cosine distances of 0.6091 and 0.5985,
+           all above the 0.5 relevance gate in ask(), so the pipeline returned the
+           fallback before the LLM saw them. See FAILURE ANALYSIS below.
+
+================================================================================
+FAILURE ANALYSIS
+================================================================================
+Failure case: Question 5 — "What specific piece of advice do veteran fans
+repeatedly give regarding cell phone usage at Sleep Token rituals?"
+
+Observed failure:
+The system returned the out-of-scope fallback ("I don't have enough information
+on that topic in the available documents") for a question the documents DO
+answer. Expected: don't record the whole show / phone down, be present.
+
+Pipeline stage: Both — retrieval (weak ranking) and the generation-gate
+threshold that acts on it.
+
+Specific cause:
+The relevant advice lives in chunks that are mostly about other topics — doc4.txt
+#0 mixes "Phone down hands up" with merch-line and hydration chatter, and doc3.txt
+#25 buries "don't hold your phone high above your head" inside general show
+etiquette. That dilution, plus a vocabulary gap between the formal query ("cell
+phone usage at Sleep Token rituals," "veteran fans") and the casual source text
+("phone," "concert," "show"), pushed every cosine distance above 0.5 (range
+0.5557-0.6091). The < 0.5 fallback gate in ask() then filtered out all five
+retrieved chunks and short-circuited to the fallback before calling the LLM.
+
+Evidence:
+retrieve(Q5, k=5) distances and sources:
+  Rank 1 | 0.5557 | doc2.txt #1  (Sleep = Death theory — off topic)
+  Rank 2 | 0.5744 | doc1.txt #24 (Sleep as addiction metaphor — off topic)
+  Rank 3 | 0.5795 | doc1.txt #0  (lore intro — off topic)
+  Rank 4 | 0.5985 | doc3.txt #25 ("If you must film... don't hold your phone high
+                                   above your head... Just be present")  <-- relevant
+  Rank 5 | 0.6091 | doc4.txt #0  ("Don't record the entire concert on your phone...
+                                   Phone down hands up!")                <-- the answer
+The correct content was retrieved (ranks 4-5) but scored just above the 0.5 cutoff.
+
+What would fix it:
+Raise the ask() fallback gate from 0.5 to ~0.65 and let the LLM's grounding
+instruction (which already emits the fallback for genuinely empty context) handle
+borderline cases. At 0.65, doc4.txt #0 (0.6091) and doc3.txt #25 (0.5985) would
+reach the model, which can then extract the phone-down advice. The out-of-scope
+Taylor Swift query would still be rejected by the system prompt's explicit
+fallback instruction even if it passed the looser numeric gate.
