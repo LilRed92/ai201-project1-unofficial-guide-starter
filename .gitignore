@@ -18,3 +18,15 @@ chroma/
 
 # macOS
 .DS_Store
+
+# user specific
+.history/
+node_modules/
+.vscode/
+package-lock.json
+package.json
+TODO
+generate-commit.js
+.husky/
+commitlint.config.js
+.ai-commit-rules.txt
