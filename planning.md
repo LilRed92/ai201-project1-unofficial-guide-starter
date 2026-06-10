@@ -41,11 +41,11 @@ The Unofficial Guide to Band Lore and Concert Culture. Official band websites ar
      numbers fit the structure of your documents.
      A review-heavy corpus warrants different chunking than a long FAQ. -->
 
-**Chunk size:**
+**Chunk size:** 800 characters
 
-**Overlap:**
+**Overlap:** 150 characters
 
-**Reasoning:**
+**Reasoning:** Since my sources are mostly deep-dive Reddit threads and fan wikis, the information is usually grouped into long, multi-sentence paragraphs explaining complex lore or giving detailed concert advice. If I make the chunks too small, I risk cutting a theory in half, which would make it lose all context. 800 characters is usually enough to capture a full thought or a detailed Reddit comment. The 150-character overlap ensures that if a key term—like "Papa Emeritus" or "Cardinal Copia"—happens right at the split, it doesn't get chopped in half and missed by the search.
 
 ---
 
@@ -57,11 +57,11 @@ The Unofficial Guide to Band Lore and Concert Culture. Official band websites ar
      would you weigh in choosing a different embedding model — context length, multilingual
      support, accuracy on domain-specific text, latency? -->
 
-**Embedding model:**
+**Embedding model:** `all-MiniLM-L6-v2` (via sentence-transformers)
 
-**Top-k:**
+**Top-k:** 4
 
-**Production tradeoff reflection:**
+**Production tradeoff reflection:** Even though I have $50 in Claude API credits available for this course, I am sticking with the local `all-MiniLM-L6-v2` model for this initial prototype to ensure rapid development and avoid API debugging. If I were deploying this to production, I would use those credits to shift the architecture to the Anthropic ecosystem. I would swap the local embeddings for Voyage AI (Anthropic's embedding partner), which handles domain-specific jargon much better, and use Claude 3.5 Sonnet for the generation step. The tradeoff is moving from a free, local setup to a paid API with network latency, but the leap in reasoning quality for connecting obscure band lore would absolutely justify the cost.
 
 ---
 
@@ -88,9 +88,9 @@ The Unofficial Guide to Band Lore and Concert Culture. Official band websites ar
      Consider: noisy or inconsistent documents, missing source attribution, off-topic
      retrieval, chunks that split key information across boundaries. -->
 
-1.
+1. **Reddit formatting junk:** Scraping from Reddit means I'm going to pull in a lot of weird text artifacts like `[deleted]`, spoiler tags, or "Edit: thanks for the gold" text. If my cleaning step isn't solid, that junk is going to end up in the vector store and confuse the LLM.
 
-2.
+2. **Cross-band lore confusion:** Because I'm mixing the lore of Ghost, Sleep Token, and Rob Zombie, there is a very real risk that the retrieval step pulls a chunk about Ghost's quasi-religious themes when a user is actually asking about Sleep Token's deity. If the LLM isn't grounded properly, it might start hallucinating crossover events that don't exist.
 
 ---
 
@@ -101,6 +101,15 @@ The Unofficial Guide to Band Lore and Concert Culture. Official band websites ar
      Label each stage with the tool or library you're using.
      You can use ASCII art, a Mermaid diagram, or embed a sketch as an image.
      You'll use this diagram as context when prompting AI tools to implement each stage. -->
+
+```mermaid
+graph TD
+    Ingestion[Document Ingestion: Python] --> Chunking[Chunking Strategy]
+    Chunking --> Embedding[Embedding: all-MiniLM-L6-v2]
+    Embedding --> DB[Vector Store: ChromaDB]
+    DB --> Retrieval[Retrieval: Similarity Search]
+    Retrieval --> LLM[Generation: Groq llama-3.3-70b]
+```
 
 ---
 
@@ -117,7 +126,19 @@ The Unofficial Guide to Band Lore and Concert Culture. Official band websites ar
      with my specified chunk size and overlap" is a plan. -->
 
 **Milestone 3 — Ingestion and chunking:**
+- **Tool:** Claude 3.5 Sonnet (using my Pro credits)
+- **Input:** I will provide the "Documents" section and my "Chunking Strategy" (800 characters, 150 overlap). I will also specify that the source files are raw text scraped from Reddit.
+- **Expected Output:** A Python script that loads the text files, strips out basic Reddit formatting/markdown junk, and chunks the text according to my exact size and overlap rules.
+- **Verification:** I will print out 5 random chunks to manually verify that the paragraphs are readable, self-contained, and aren't getting sliced in the middle of important words.
 
 **Milestone 4 — Embedding and retrieval:**
+- **Tool:** Claude 3.5 Sonnet
+- **Input:** I will give it my pipeline diagram and the code generated from Milestone 3. I will specifically ask it to write the code connecting the chunks to the `all-MiniLM-L6-v2` model and storing them in a local ChromaDB instance, including the source filename as metadata.
+- **Expected Output:** A Python script that embeds the chunks into the vector store and includes a retrieval function that returns the top 4 results for a query.
+- **Verification:** I will manually run 3 of the test questions from my Evaluation Plan through the retrieval function. I'll verify it works by checking if the printed distance scores are under 0.5 and ensuring it pulls Sleep Token chunks for Sleep Token questions, rather than mixing up the band lore.
 
 **Milestone 5 — Generation and interface:**
+- **Tool:** ChatGPT
+- **Input:** I will provide the Gradio skeleton code from the CodePath instructions and my strict grounding requirement: the LLM must only use retrieved context and must append the source filename to its answer.
+- **Expected Output:** The final `app.py` file connecting the `llama-3.3-70b-versatile` model via the Groq API to my ChromaDB retrieval function, wrapped in a working Gradio UI.
+- **Verification:** I will test the grounding by asking a trick question completely unrelated to my documents (e.g., something about Taylor Swift's concert etiquette). I will verify it passes if the system explicitly refuses to answer rather than hallucinating a response.
