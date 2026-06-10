@@ -94,6 +94,8 @@ The Unofficial Guide to Band Lore and Concert Culture. Official band websites ar
 
 2. **Cross-band lore confusion:** Because I'm mixing the lore of Ghost, Sleep Token, and Rob Zombie, there is a very real risk that the retrieval step pulls a chunk about Ghost's quasi-religious themes when a user is actually asking about Sleep Token's deity. If the LLM isn't grounded properly, it might start hallucinating crossover events that don't exist.
 
+3. **Non-English comments:** These are international fan communities, so some threads contain comments in other languages (e.g. a long Spanish discussion of Sister's comic in the Ghost thread). My embedding model, `all-MiniLM-L6-v2`, is English-centric, so non-English chunks would embed and retrieve poorly and just add noise. **Mitigation:** during cleaning I run each paragraph through `langdetect` and drop it if it's confidently non-English. I made this filter deliberately conservative—it only judges paragraphs of at least 60 characters and only drops when the top language is non-English with ≥ 0.90 confidence and English isn't a candidate—because langdetect is unreliable on short or proper-noun-heavy text (it misclassified short English lines like `2016 "Square Hammer" Best Metal Video Won` as German). The tradeoff is that a very short foreign comment can slip through, but I'd rather keep a little stray text than accidentally delete real English content.
+
 ---
 
 ## Architecture

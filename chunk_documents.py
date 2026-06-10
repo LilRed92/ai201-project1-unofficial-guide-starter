@@ -3,9 +3,9 @@ Milestone 3 — Ingestion and chunking
 The Unofficial Guide to Band Lore and Concert Culture
 
 Reads every .txt file in the documents/ folder (doc1.txt ... doc10.txt),
-cleans out boilerplate / markdown / UI noise, and splits the substantive
-text into chunks using the planning.md spec:
-    chunk size = 800 characters, overlap = 150 characters.
+cleans out boilerplate / markdown / UI noise, drops non-English paragraphs,
+and splits the substantive text into chunks using the planning.md spec:
+    chunk size = 900 characters, overlap = 175 characters (paragraph-aware).
 
 Each chunk keeps its source filename as metadata so the embedding step
 (Milestone 4) can attribute retrieved chunks back to a document.
@@ -20,10 +20,25 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from langdetect import DetectorFactory, LangDetectException, detect_langs
+
+# Make langdetect deterministic so the same text always classifies the same way.
+DetectorFactory.seed = 0
+
 # --- Configuration (matches planning.md "Chunking Strategy") -----------------
 DOCUMENTS_DIR = Path(__file__).parent / "documents"
 CHUNK_SIZE = 900        # characters per chunk
 CHUNK_OVERLAP = 175     # characters shared between consecutive chunks
+
+# Paragraphs shorter than this are kept without language detection: langdetect
+# is unreliable on short text (e.g. "lol", proper-noun-heavy lines like
+# '2016 "Square Hammer" Best Metal Video Won'), so we don't risk dropping
+# real English. Genuine non-English comments in this corpus are much longer.
+MIN_DETECT_CHARS = 60
+
+# Only drop a paragraph when langdetect is at least this confident it's the
+# (non-English) top language. Below this, we err toward keeping it.
+LANG_DROP_CONFIDENCE = 0.90
 
 # Lines that start with one of these labels are metadata/UI noise, not content,
 # so the whole line is dropped. Matched case-insensitively at the line start.
@@ -100,6 +115,32 @@ def _looks_like_title(line: str) -> bool:
     return False
 
 
+def _is_english(paragraph: str) -> bool:
+    """True if the paragraph should be kept as English (conservatively).
+
+    `all-MiniLM-L6-v2` is English-centric, so non-English comments embed and
+    retrieve poorly and we drop them. langdetect is unreliable on short text,
+    so to avoid discarding real English we only drop a paragraph when ALL of:
+      - it is long enough to judge (>= MIN_DETECT_CHARS),
+      - English is not among the detected candidates, and
+      - the top (non-English) language is highly confident.
+    """
+    if len(paragraph) < MIN_DETECT_CHARS:
+        return True
+    try:
+        langs = detect_langs(paragraph)
+    except LangDetectException:
+        # No detectable features (e.g. only emoji/punctuation) -> keep it.
+        return True
+
+    top = langs[0]
+    if top.lang == "en":
+        return True
+    if any(l.lang == "en" and l.prob >= 0.20 for l in langs):
+        return True
+    return top.prob < LANG_DROP_CONFIDENCE
+
+
 def clean_text(raw: str) -> str:
     """Strip boilerplate/markdown/HTML/UI noise and return substantive text.
 
@@ -132,7 +173,7 @@ def clean_text(raw: str) -> str:
         ln = re.sub(r"[*_`~#>]+", "", ln)           # markdown emphasis/heading/quote
         ln = re.sub(r"^\s*[-+]\s+", "", ln)         # list bullets
         ln = re.sub(r"\s+", " ", ln).strip()        # collapse whitespace within line
-        if ln:
+        if ln and _is_english(ln):                   # drop non-English paragraphs
             paragraphs.append(ln)
 
     # One newline per paragraph -> the chunker splits on these boundaries.
