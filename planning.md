@@ -41,11 +41,13 @@ The Unofficial Guide to Band Lore and Concert Culture. Official band websites ar
      numbers fit the structure of your documents.
      A review-heavy corpus warrants different chunking than a long FAQ. -->
 
-**Chunk size:** 800 characters
+**Chunk size:** 900 characters
 
-**Overlap:** 150 characters
+**Overlap:** 175 characters
 
-**Reasoning:** Since my sources are mostly deep-dive Reddit threads and fan wikis, the information is usually grouped into long, multi-sentence paragraphs explaining complex lore or giving detailed concert advice. If I make the chunks too small, I risk cutting a theory in half, which would make it lose all context. 800 characters is usually enough to capture a full thought or a detailed Reddit comment. The 150-character overlap ensures that if a key term—like "Papa Emeritus" or "Cardinal Copia"—happens right at the split, it doesn't get chopped in half and missed by the search.
+**Reasoning:** Since my sources are mostly deep-dive Reddit threads and fan wikis, the information is usually grouped into long, multi-sentence paragraphs explaining complex lore or giving detailed concert advice. If I make the chunks too small, I risk cutting a theory in half, which would make it lose all context. 900 characters is usually enough to capture a full thought or a detailed Reddit comment, and it stays within the ~1,000-character (256-token) input window of `all-MiniLM-L6-v2`, so the entire chunk gets embedded rather than silently truncated. The 175-character overlap ensures that if a key term—like "Papa Emeritus" or "Cardinal Copia"—happens right at the split, it doesn't get chopped in half and missed by the search.
+
+**Chunking method:** I use **paragraph-aware** chunking rather than a blind character split. Each surviving Reddit comment / lore paragraph is treated as one unit, and I greedily pack consecutive whole paragraphs into a chunk until adding the next one would exceed 900 characters. This means chunks start and end on paragraph boundaries (whole comments) instead of mid-sentence, which keeps each chunk self-contained—important for a conversational source like Reddit where one comment is usually one coherent opinion or theory. When a chunk closes, the trailing paragraph(s) that fit within the 175-character overlap are repeated at the start of the next chunk to preserve context across the seam. The only time a paragraph is split mid-paragraph is the rare case where a single comment is longer than 900 characters, in which case it falls back to a word-boundary split (never mid-word). Because chunks pack whole paragraphs, their lengths vary (roughly 650–900 characters) instead of all sitting at the 900 limit.
 
 ---
 
@@ -126,19 +128,19 @@ graph TD
      with my specified chunk size and overlap" is a plan. -->
 
 **Milestone 3 — Ingestion and chunking:**
-- **Tool:** Claude 3.5 Sonnet (using my Pro credits)
-- **Input:** I will provide the "Documents" section and my "Chunking Strategy" (800 characters, 150 overlap). I will also specify that the source files are raw text scraped from Reddit.
-- **Expected Output:** A Python script that loads the text files, strips out basic Reddit formatting/markdown junk, and chunks the text according to my exact size and overlap rules.
-- **Verification:** I will print out 5 random chunks to manually verify that the paragraphs are readable, self-contained, and aren't getting sliced in the middle of important words.
+- **Tool:** Claude
+- **Input:** I will provide the "Documents" section and my "Chunking Strategy" (800 characters, 150 overlap). I will also specify that the source files are raw text scraped from Reddit, so the cleaning step must handle markdown and HTML artifacts.
+- **Expected Output:** A Python script that loads the local text files, strips out basic Reddit formatting/markdown/HTML junk, and chunks the text according to my exact 800/150 size and overlap rules, tagging each chunk with its source filename.
+- **Verification:** I will print out 5 random chunks to manually verify that the paragraphs are readable, self-contained, and aren't getting sliced in the middle of important words. I will also confirm the reported chunk lengths stay at or below 800 characters and that consecutive chunks share the 150-character overlap.
 
 **Milestone 4 — Embedding and retrieval:**
-- **Tool:** Claude 3.5 Sonnet
+- **Tool:** Claude
 - **Input:** I will give it my pipeline diagram and the code generated from Milestone 3. I will specifically ask it to write the code connecting the chunks to the `all-MiniLM-L6-v2` model and storing them in a local ChromaDB instance, including the source filename as metadata.
 - **Expected Output:** A Python script that embeds the chunks into the vector store and includes a retrieval function that returns the top 4 results for a query.
 - **Verification:** I will manually run 3 of the test questions from my Evaluation Plan through the retrieval function. I'll verify it works by checking if the printed distance scores are under 0.5 and ensuring it pulls Sleep Token chunks for Sleep Token questions, rather than mixing up the band lore.
 
 **Milestone 5 — Generation and interface:**
-- **Tool:** ChatGPT
+- **Tool:** Claude (for the application code); Groq (`llama-3.3-70b-versatile`) is the runtime LLM that generates answers
 - **Input:** I will provide the Gradio skeleton code from the CodePath instructions and my strict grounding requirement: the LLM must only use retrieved context and must append the source filename to its answer.
 - **Expected Output:** The final `app.py` file connecting the `llama-3.3-70b-versatile` model via the Groq API to my ChromaDB retrieval function, wrapped in a working Gradio UI.
 - **Verification:** I will test the grounding by asking a trick question completely unrelated to my documents (e.g., something about Taylor Swift's concert etiquette). I will verify it passes if the system explicitly refuses to answer rather than hallucinating a response.
